@@ -10,7 +10,8 @@ import { ColorNode } from "./nodes/color-node";
 import { BlurBackgroundNode } from "./nodes/blur-background-node";
 import { EffectLayerNode } from "./nodes/effect-layer-node";
 import type { AnyBaseNode } from "./nodes/base-node";
-import type { TBackground, TCanvasSize } from "@/project/types";
+import type { TBackground, TCanvasSize, TWatermarkConfig } from "@/project/types";
+import { WatermarkNode } from "./nodes/watermark-node";
 import { DEFAULT_BACKGROUND_BLUR_INTENSITY } from "@/background/blur";
 import {
 	buildTransformFromParams,
@@ -221,6 +222,7 @@ export type BuildSceneParams = {
 	duration: number;
 	background: TBackground;
 	isPreview?: boolean;
+	watermark?: TWatermarkConfig;
 };
 
 export function buildScene({
@@ -230,6 +232,7 @@ export function buildScene({
 	duration,
 	background,
 	isPreview,
+	watermark,
 }: BuildSceneParams) {
 	const rootNode = new RootNode({ duration });
 	const mediaMap = new Map(mediaAssets.map((m) => [m.id, m]));
@@ -267,6 +270,11 @@ export function buildScene({
 
 	for (const node of allNodes) {
 		rootNode.add(node);
+	}
+
+	// Add watermark layer on top of everything
+	if (watermark?.enabled) {
+		rootNode.add(new WatermarkNode(watermark));
 	}
 
 	return rootNode;

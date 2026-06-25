@@ -74,6 +74,7 @@ import {
 	Exchange01Icon,
 	KeyframeIcon,
 	MagicWand05Icon,
+	ClosedCaptionIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { uppercase } from "@/utils/string";
@@ -89,6 +90,7 @@ import {
 	getExpansionHeight,
 	type ExpandedRow,
 } from "./expanded-layout";
+import { isSubtitleElement } from "@/subtitles/components/style-sync";
 
 const KEYFRAME_INDICATOR_MIN_WIDTH_PX = 40;
 const ELEMENT_RING_WIDTH_PX = 1.5;
@@ -590,6 +592,9 @@ function ElementInner({
 										elementType: element.type,
 									}),
 								}),
+								element.type === "text" &&
+									isSubtitleElement({ element }) &&
+									"bg-[#3d8a75]",
 								isReducedOpacity && "opacity-50",
 							)}
 							style={{ height: `${baseTrackHeight}px` }}
@@ -906,8 +911,21 @@ function TextElementContent({
 }: {
 	element: Extract<TimelineElementType, { type: "text" }>;
 }) {
+	const isSubtitle = isSubtitleElement({ element });
+
 	return (
-		<div className="flex size-full items-center justify-start pl-2">
+		<div
+			className={cn(
+				"flex size-full items-center justify-start pl-2",
+				isSubtitle && "gap-1.5",
+			)}
+		>
+			{isSubtitle && (
+				<HugeiconsIcon
+					icon={ClosedCaptionIcon}
+					className="size-3.5 shrink-0 text-white/80"
+				/>
+			)}
 			<span className="truncate text-xs text-white">
 				{typeof element.params.content === "string" ? element.params.content : ""}
 			</span>

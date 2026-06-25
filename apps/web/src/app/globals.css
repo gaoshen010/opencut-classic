@@ -150,7 +150,7 @@
   --breakpoint-xs: 30rem;
 
   /* Typography */
-  --font-sans: var(--font-inter), sans-serif;
+  --font-sans: var(--font-latin), var(--font-chinese), "PingFang SC", "Microsoft YaHei", sans-serif;
 
   /* Font sizes */
   --text-xs: 0.72rem;

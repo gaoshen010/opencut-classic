@@ -11,11 +11,12 @@ import {
 	GraphicNode,
 	type ResolvedGraphicNodeState,
 } from "../nodes/graphic-node";
-import { ImageNode } from "../nodes/image-node";
+import { ImageNode, loadImageSource } from "../nodes/image-node";
 import { RootNode } from "../nodes/root-node";
 import { StickerNode } from "../nodes/sticker-node";
 import { renderTextToContext, TextNode } from "../nodes/text-node";
 import { VideoNode } from "../nodes/video-node";
+import { WatermarkNode } from "../nodes/watermark-node";
 import type { ResolvedVisualSourceNodeState } from "../nodes/visual-node";
 import type {
 	FrameDescriptor,
@@ -203,6 +204,16 @@ async function collectNode({
 			textures,
 		});
 	}
+
+	if (node instanceof WatermarkNode) {
+		await collectWatermarkNode({
+			node,
+			renderer,
+			path,
+			items,
+			textures,
+		});
+	}
 }
 
 async function collectVisualSourceNode({
@@ -322,6 +333,304 @@ function collectTextNode({
 		effectPassGroups: node.resolved.effectPasses,
 		mask: null,
 	});
+}
+
+function getWatermarkPositions({
+	position,
+	canvasWidth,
+	canvasHeight,
+	watermarkWidth,
+	watermarkHeight,
+	offsetX,
+	offsetY,
+}: {
+	position: string;
+	canvasWidth: number;
+	canvasHeight: number;
+	watermarkWidth: number;
+	watermarkHeight: number;
+	offsetX: number;
+	offsetY: number;
+}): { centerX: number; centerY: number } {
+	let centerX: number;
+	let centerY: number;
+
+	switch (position) {
+		case "top-left":
+			centerX = offsetX + watermarkWidth / 2;
+			centerY = offsetY + watermarkHeight / 2;
+			break;
+		case "top-center":
+			centerX = canvasWidth / 2;
+			centerY = offsetY + watermarkHeight / 2;
+			break;
+		case "top-right":
+			centerX = canvasWidth - offsetX - watermarkWidth / 2;
+			centerY = offsetY + watermarkHeight / 2;
+			break;
+		case "center-left":
+			centerX = offsetX + watermarkWidth / 2;
+			centerY = canvasHeight / 2;
+			break;
+		case "center":
+			centerX = canvasWidth / 2;
+			centerY = canvasHeight / 2;
+			break;
+		case "center-right":
+			centerX = canvasWidth - offsetX - watermarkWidth / 2;
+			centerY = canvasHeight / 2;
+			break;
+		case "bottom-left":
+			centerX = offsetX + watermarkWidth / 2;
+			centerY = canvasHeight - offsetY - watermarkHeight / 2;
+			break;
+		case "bottom-center":
+			centerX = canvasWidth / 2;
+			centerY = canvasHeight - offsetY - watermarkHeight / 2;
+			break;
+		case "bottom-right":
+		default:
+			centerX = canvasWidth - offsetX - watermarkWidth / 2;
+			centerY = canvasHeight - offsetY - watermarkHeight / 2;
+			break;
+	}
+
+	return { centerX, centerY };
+}
+
+function getTilePositions({
+	tileMode,
+	canvasWidth,
+	canvasHeight,
+	watermarkWidth,
+	watermarkHeight,
+	tileGap,
+}: {
+	tileMode: string;
+	canvasWidth: number;
+	canvasHeight: number;
+	watermarkWidth: number;
+	watermarkHeight: number;
+	tileGap: { x: number; y: number };
+}): Array<{ centerX: number; centerY: number }> {
+	const positions: Array<{ centerX: number; centerY: number }> = [];
+	const gapX = tileGap.x + watermarkWidth;
+	const gapY = tileGap.y + watermarkHeight;
+
+	const cols = Math.ceil(canvasWidth / gapX) + 1;
+	const rows = Math.ceil(canvasHeight / gapY) + 1;
+
+	for (let row = 0; row < rows; row++) {
+		for (let col = 0; col < cols; col++) {
+			const diagonalOffset =
+				tileMode === "diagonal" && row % 2 === 1 ? gapX / 2 : 0;
+			positions.push({
+				centerX: col * gapX + watermarkWidth / 2 + diagonalOffset,
+				centerY: row * gapY + watermarkHeight / 2,
+			});
+		}
+	}
+
+	return positions;
+}
+
+async function collectWatermarkNode({
+	node,
+	renderer,
+	path,
+	items,
+	textures,
+}: {
+	node: WatermarkNode;
+	renderer: CanvasRenderer;
+	path: string;
+	items: FrameItemDescriptor[];
+	textures: Map<string, TextureUploadDescriptor>;
+}) {
+	const config = node.config;
+	if (!config.enabled) {
+		return;
+	}
+
+	const { width, height } = renderer;
+	const textureId = `${path}:watermark`;
+	const contentHash = `watermark:${width}x${height}:${JSON.stringify(config)}`;
+
+	const drawWatermark: TextureCanvasDrawFn = (ctx) => {
+		const baseFontSize = config.fontSize ?? 24;
+		const fontFamily = config.fontFamily ?? "Arial";
+		const fontColor = config.fontColor ?? "#ffffff";
+		const scale = config.scale ?? 1;
+		const rotation = config.rotation ?? 0;
+
+		// Measure watermark size
+		let wmWidth: number;
+		let wmHeight: number;
+
+		if (config.type === "text") {
+			ctx.font = `${baseFontSize * scale}px ${fontFamily}`;
+			const text = config.text ?? "";
+			const metrics = ctx.measureText(text);
+			wmWidth = metrics.width;
+			wmHeight = baseFontSize * scale * 1.2;
+		} else {
+			// For image watermarks, use a default size that will be scaled
+			wmWidth = 100 * scale;
+			wmHeight = 100 * scale;
+		}
+
+		const positions: Array<{ centerX: number; centerY: number }> = [];
+		const tileMode = config.tileMode ?? "none";
+
+		if (tileMode === "none") {
+			const pos = getWatermarkPositions({
+				position: config.position,
+				canvasWidth: width,
+				canvasHeight: height,
+				watermarkWidth: wmWidth,
+				watermarkHeight: wmHeight,
+				offsetX: config.offsetX,
+				offsetY: config.offsetY,
+			});
+			positions.push(pos);
+		} else {
+			const tileGap = config.tileGap ?? { x: 100, y: 100 };
+			const tiledPositions = getTilePositions({
+				tileMode,
+				canvasWidth: width,
+				canvasHeight: height,
+				watermarkWidth: wmWidth,
+				watermarkHeight: wmHeight,
+				tileGap,
+			});
+			positions.push(...tiledPositions);
+		}
+
+		for (const pos of positions) {
+			ctx.save();
+			ctx.translate(pos.centerX, pos.centerY);
+			if (rotation !== 0) {
+				ctx.rotate((rotation * Math.PI) / 180);
+			}
+
+			if (config.type === "text") {
+				ctx.font = `${baseFontSize * scale}px ${fontFamily}`;
+				ctx.fillStyle = fontColor;
+				ctx.textAlign = "center";
+				ctx.textBaseline = "middle";
+				ctx.fillText(config.text ?? "", 0, 0);
+			}
+
+			ctx.restore();
+		}
+	};
+
+	textures.set(textureId, {
+		kind: "rendered",
+		id: textureId,
+		contentHash,
+		width,
+		height,
+		draw: drawWatermark,
+	});
+
+	items.push({
+		type: "layer",
+		textureId,
+		transform: fullCanvasTransform(renderer),
+		opacity: config.opacity ?? 0.3,
+		blendMode: "normal",
+		effectPassGroups: [],
+		mask: null,
+	});
+
+	// Handle image watermark as a separate async layer
+	if (config.type === "image" && config.imageDataUrl) {
+		const imageTextureId = `${path}:watermark-image`;
+		try {
+			const imageSource = await loadImageSource({
+				url: config.imageDataUrl,
+			});
+			textures.set(imageTextureId, {
+				kind: "external",
+				id: imageTextureId,
+				source: imageSource.source,
+				width: imageSource.width,
+				height: imageSource.height,
+			});
+
+			const scale = config.scale ?? 1;
+			const scaledWidth = imageSource.width * scale;
+			const scaledHeight = imageSource.height * scale;
+
+			const imagePositions: Array<{ centerX: number; centerY: number }> = [];
+			const tileMode = config.tileMode ?? "none";
+
+			if (tileMode === "none") {
+				const pos = getWatermarkPositions({
+					position: config.position,
+					canvasWidth: width,
+					canvasHeight: height,
+					watermarkWidth: scaledWidth,
+					watermarkHeight: scaledHeight,
+					offsetX: config.offsetX,
+					offsetY: config.offsetY,
+				});
+				imagePositions.push(pos);
+			} else {
+				const tileGap = config.tileGap ?? { x: 100, y: 100 };
+				const tiledPositions = getTilePositions({
+					tileMode,
+					canvasWidth: width,
+					canvasHeight: height,
+					watermarkWidth: scaledWidth,
+					watermarkHeight: scaledHeight,
+					tileGap,
+				});
+				imagePositions.push(...tiledPositions);
+			}
+
+			for (let i = 0; i < imagePositions.length; i++) {
+				const pos = imagePositions[i];
+				const instanceTextureId = `${path}:watermark-image-instance-${i}`;
+
+				textures.set(instanceTextureId, {
+					kind: "rendered",
+					id: instanceTextureId,
+					contentHash: `wm-img:${pos.centerX}:${pos.centerY}:${scaledWidth}:${scaledHeight}:${config.rotation}:${config.imageDataUrl}`,
+					width,
+					height,
+					draw: (ctx) => {
+						ctx.save();
+						ctx.translate(pos.centerX, pos.centerY);
+						if (config.rotation) {
+							ctx.rotate((config.rotation * Math.PI) / 180);
+						}
+						ctx.drawImage(
+							imageSource.source,
+							-scaledWidth / 2,
+							-scaledHeight / 2,
+							scaledWidth,
+							scaledHeight,
+						);
+						ctx.restore();
+					},
+				});
+
+				items.push({
+					type: "layer",
+					textureId: instanceTextureId,
+					transform: fullCanvasTransform(renderer),
+					opacity: config.opacity ?? 0.3,
+					blendMode: "normal",
+					effectPassGroups: [],
+					mask: null,
+				});
+			}
+		} catch {
+			// Image load failed - silently skip image watermark
+		}
+	}
 }
 
 function computeVisualTransform({

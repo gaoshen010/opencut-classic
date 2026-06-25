@@ -7,9 +7,14 @@ import { TooltipProvider } from "../components/ui/tooltip";
 import { baseMetaData } from "./metadata";
 import { BotIdClient } from "botid/client";
 import { webEnv } from "@/env/web";
-import { Inter } from "next/font/google";
+import { Inter, Noto_Sans_SC } from "next/font/google";
 
-const siteFont = Inter({ subsets: ["latin"] });
+const siteFontLatin = Inter({ subsets: ["latin"], variable: "--font-latin" });
+const siteFontChinese = Noto_Sans_SC({
+	subsets: ["latin"],
+	weight: ["400", "500", "700"],
+	variable: "--font-chinese",
+});
 
 export const metadata = baseMetaData;
 
@@ -26,7 +31,11 @@ export default function RootLayout({
 	children: React.ReactNode;
 }>) {
 	return (
-		<html lang="en" suppressHydrationWarning>
+		<html
+			lang="zh-CN"
+			suppressHydrationWarning
+			className={`${siteFontLatin.variable} ${siteFontChinese.variable}`}
+		>
 			<head>
 				<BotIdClient protect={protectedRoutes} />
 				{process.env.NODE_ENV === "development" && (
@@ -39,7 +48,7 @@ export default function RootLayout({
 					</>
 				)}
 			</head>
-			<body className={`${siteFont.className} font-sans antialiased`}>
+			<body className="font-sans antialiased">
 				<ThemeProvider
 					attribute="class"
 					defaultTheme="system"

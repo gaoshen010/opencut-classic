@@ -26,6 +26,24 @@ export interface TProjectMetadata {
 	updatedAt: Date;
 }
 
+export type TWatermarkConfig = {
+	enabled: boolean;
+	type: 'text' | 'image';
+	imageDataUrl?: string;
+	text?: string;
+	fontFamily?: string;
+	fontSize?: number;
+	fontColor?: string;
+	opacity: number;
+	position: 'top-left' | 'top-center' | 'top-right' | 'center-left' | 'center' | 'center-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
+	offsetX: number;
+	offsetY: number;
+	rotation: number;
+	scale: number;
+	tileMode: 'none' | 'tile' | 'diagonal';
+	tileGap?: { x: number; y: number };
+};
+
 export interface TProjectSettings {
 	fps: FrameRate;
 	canvasSize: TCanvasSize;
@@ -33,6 +51,7 @@ export interface TProjectSettings {
 	lastCustomCanvasSize?: TCanvasSize | null;
 	originalCanvasSize?: TCanvasSize | null;
 	background: TBackground;
+	watermark?: TWatermarkConfig;
 }
 
 export interface TTimelineViewState {

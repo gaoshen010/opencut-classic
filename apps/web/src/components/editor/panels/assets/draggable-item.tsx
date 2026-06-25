@@ -13,6 +13,7 @@ import {
 import { useEditor } from "@/editor/use-editor";
 import type { TimelineDragData } from "@/timeline/drag";
 import { cn } from "@/utils/ui";
+import { t } from "@/i18n";
 import type { MediaTime } from "@/wasm";
 
 export interface DraggableItemProps {
@@ -187,7 +188,7 @@ export function DraggableItem({
 								{shouldShowPlusOnDrag && (
 									<PlusButton
 										onClick={handleAddToTimeline}
-										tooltipText="Add to timeline or drag to position"
+										tooltipText={t("assets.draggable.addToTimeline")}
 									/>
 								)}
 							</AspectRatio>

@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { RiDiscordFill, RiTwitterXLine } from "react-icons/ri";
 import { FaGithub } from "react-icons/fa6";
@@ -5,6 +7,7 @@ import Image from "next/image";
 import { DEFAULT_LOGO_URL } from "@/site/brand";
 import { SOCIAL_LINKS } from "@/site/social";
 import { capitalizeFirstLetter } from "@/utils/string";
+import { useT } from "@/i18n";
 
 type Category = "resources" | "company";
 
@@ -15,23 +18,25 @@ interface FooterLink {
 
 type CategoryLinks = Record<Category, FooterLink[]>;
 
-const links: CategoryLinks = {
-	resources: [
-		{ label: "Roadmap", href: "/roadmap" },
-		{ label: "Changelog", href: "/changelog" },
-		{ label: "Blog", href: "/blog" },
-		{ label: "Privacy", href: "/privacy" },
-		{ label: "Terms of use", href: "/terms" },
-	],
-	company: [
-		{ label: "Contributors", href: "/contributors" },
-		{ label: "Sponsors", href: "/sponsors" },
-		{ label: "Brand", href: "/brand" },
-		{ label: "About", href: `${SOCIAL_LINKS.github}/blob/main/README.md` },
-	],
-};
-
 export function Footer() {
+	const t = useT();
+
+	const links: CategoryLinks = {
+		resources: [
+			{ label: t("landing.roadmap"), href: "/roadmap" },
+			{ label: t("landing.changelog"), href: "/changelog" },
+			{ label: t("landing.blog"), href: "/blog" },
+			{ label: t("landing.privacy"), href: "/privacy" },
+			{ label: t("landing.terms"), href: "/terms" },
+		],
+		company: [
+			{ label: t("landing.contributors"), href: "/contributors" },
+			{ label: t("landing.sponsors"), href: "/sponsors" },
+			{ label: t("landing.brand"), href: "/brand" },
+			{ label: t("landing.about"), href: `${SOCIAL_LINKS.github}/blob/main/README.md` },
+		],
+	};
+
 	return (
 		<footer className="bg-background border-t">
 			<div className="mx-auto max-w-5xl px-8 py-10">
@@ -49,7 +54,7 @@ export function Footer() {
 							<span className="text-lg font-bold">OpenCut</span>
 						</div>
 						<p className="text-muted-foreground mb-5 text-sm md:text-left">
-							The privacy-first video editor that feels simple to use.
+							{t("landing.tagline")}
 						</p>
 						<div className="flex justify-start gap-3">
 							<Link

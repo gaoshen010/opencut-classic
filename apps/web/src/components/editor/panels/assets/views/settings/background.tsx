@@ -19,6 +19,7 @@ import { colors } from "@/data/colors/solid";
 import { syntaxUIGradients } from "@/data/colors/syntax-ui";
 import { useEditor } from "@/editor/use-editor";
 import { effectPreviewService } from "@/services/renderer/effect-preview";
+import { t, useT } from "@/i18n";
 import { cn } from "@/utils/ui";
 
 const BLUR_PREVIEW_UNIFORM_DIMENSIONS = {
@@ -39,6 +40,7 @@ const BlurPreview = memo(
 		isSelected: boolean;
 		onSelect: () => void;
 	}) => {
+		const t = useT();
 		const canvasRef = useRef<HTMLCanvasElement>(null);
 
 		useEffect(() => {
@@ -67,7 +69,7 @@ const BlurPreview = memo(
 				)}
 				onClick={onSelect}
 				type="button"
-				aria-label={`Select ${blur.label} blur`}
+				aria-label={t("background.selectBlur", { label: blur.label })}
 			>
 				<canvas
 					ref={canvasRef}
@@ -99,6 +101,7 @@ const BackgroundPreviews = memo(
 		onSelect: (bg: string) => void;
 		useBackgroundColor?: boolean;
 	}) => {
+		const t = useT();
 		return useMemo(
 			() =>
 				backgrounds.map((bg) => (
@@ -122,7 +125,7 @@ const BackgroundPreviews = memo(
 						}
 						onClick={() => onSelect(bg)}
 						type="button"
-						aria-label={`Select background ${bg}`}
+						aria-label={t("background.selectColor", { bg })}
 					/>
 				)),
 			[
@@ -149,6 +152,7 @@ function CustomColorPreview({
 	onPreview: (color: string) => void;
 	onCommit: (color: string) => void;
 }) {
+	const t = useT();
 	return (
 		<Popover>
 			<PopoverTrigger asChild>
@@ -158,7 +162,7 @@ function CustomColorPreview({
 						isSelected && "border-primary border-2",
 					)}
 					type="button"
-					aria-label="Pick a custom background color"
+					aria-label={t("background.pickColor")}
 				>
 					<span
 						className="absolute inset-0"
@@ -180,9 +184,9 @@ function CustomColorPreview({
 }
 
 const COLOR_SECTIONS = [
-	{ id: "colors", title: "Colors", backgrounds: colors, useBackgroundColor: true, showCustomPicker: true },
-	{ id: "pattern-craft", title: "Pattern craft", backgrounds: patternCraftGradients, showCustomPicker: false },
-	{ id: "syntax-ui", title: "Syntax UI", backgrounds: syntaxUIGradients, showCustomPicker: false },
+	{ id: "colors", title: t("background.colors"), backgrounds: colors, useBackgroundColor: true, showCustomPicker: true },
+	{ id: "pattern-craft", title: t("background.patternCraft"), backgrounds: patternCraftGradients, showCustomPicker: false },
+	{ id: "syntax-ui", title: t("background.syntaxUI"), backgrounds: syntaxUIGradients, showCustomPicker: false },
 ] as const;
 
 export function BackgroundContent() {
@@ -263,7 +267,7 @@ export function BackgroundContent() {
 				showTopBorder={false}
 			>
 				<SectionHeader>
-					<SectionTitle>Blur</SectionTitle>
+					<SectionTitle>{t("background.blur")}</SectionTitle>
 				</SectionHeader>
 				<SectionContent>
 					<div className="flex flex-wrap gap-2">{blurPreviews}</div>

@@ -16,6 +16,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@/utils/ui";
+import { useT } from "@/i18n";
 import { DEFAULT_LOGO_URL, SITE_URL } from "@/site/brand";
 import { SOCIAL_LINKS } from "@/site/social";
 import {
@@ -26,24 +27,25 @@ import {
 } from "./ui/context-menu";
 
 export function Header() {
+	const t = useT();
 	const [isMenuOpen, setIsMenuOpen] = useState(false);
 	const closeMenu = () => setIsMenuOpen(false);
 
 	const links = [
 		{
-			label: "Roadmap",
+			label: t("landing.roadmap"),
 			href: "/roadmap",
 		},
 		{
-			label: "Contributors",
+			label: t("landing.contributors"),
 			href: "/contributors",
 		},
 		{
-			label: "Sponsors",
+			label: t("landing.sponsors"),
 			href: "/sponsors",
 		},
 		{
-			label: "Blog",
+			label: t("landing.blog"),
 			href: "/blog",
 		},
 	];
@@ -73,7 +75,7 @@ export function Header() {
 								}}
 							>
 								<HugeiconsIcon icon={Copy01Icon} />
-								Copy SVG
+								{t("landing.copySvg")}
 							</ContextMenuItem>
 							<ContextMenuItem
 								onClick={() => {
@@ -84,12 +86,12 @@ export function Header() {
 								}}
 							>
 								<HugeiconsIcon icon={Download01Icon} />
-								Download SVG
+								{t("landing.downloadSvg")}
 							</ContextMenuItem>
 							<Link href="/brand">
 								<ContextMenuItem>
 									<HugeiconsIcon icon={LinkSquare02Icon} />
-									Brand assets
+									{t("landing.brandAssets")}
 								</ContextMenuItem>
 							</Link>
 						</ContextMenuContent>
@@ -126,7 +128,7 @@ export function Header() {
 						</Link>
 						<Link href="/projects">
 							<Button className="text-sm">
-								Projects
+								{t("landing.projects")}
 								<ArrowRight className="size-4" />
 							</Button>
 						</Link>

@@ -23,6 +23,7 @@ import { decodeAudioToFloat32 } from "@/media/audio";
 import { buildCaptionChunks } from "@/transcription/caption";
 import { insertCaptionChunksAsTextTrack } from "@/subtitles/insert";
 import { parseSubtitleFile } from "@/subtitles/parse";
+import type { SubtitleCue } from "@/subtitles/types";
 import { Spinner } from "@/components/ui/spinner";
 import {
 	Section,
@@ -30,7 +31,7 @@ import {
 	SectionField,
 	SectionFields,
 } from "@/components/section";
-import { AlertCircleIcon, CloudUploadIcon } from "@hugeicons/core-free-icons";
+import { AlertCircleIcon, CloudUploadIcon, FileEditIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
 	Tooltip,
@@ -38,6 +39,14 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+	Dialog,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { useT } from "@/i18n";
 import type { DiagnosticSeverity } from "@/diagnostics/types";
 
 const DIAGNOSTIC_BUTTON_VARIANT: Record<
@@ -83,10 +92,30 @@ function processingReducer(
 }
 /* eslint-enable opencut/prefer-object-params */
 
+const SCRIPT_SEGMENT_DURATION_SECONDS = 3;
+
+function parseScriptText({ text }: { text: string }): SubtitleCue[] {
+	const segments = text
+		.split(/[。！？；.!?;\n]+/)
+		.map((segment) => segment.trim())
+		.filter((segment) => segment.length > 0);
+
+	if (segments.length === 0) return [];
+
+	return segments.map((segment, index) => ({
+		text: segment,
+		startTime: index * SCRIPT_SEGMENT_DURATION_SECONDS,
+		duration: SCRIPT_SEGMENT_DURATION_SECONDS,
+	}));
+}
+
 export function Captions() {
+	const t = useT();
 	const [selectedLanguage, setSelectedLanguage] =
 		useState<TranscriptionLanguage>("auto");
 	const [processing, dispatch] = useReducer(processingReducer, IDLE_STATE);
+	const [scriptDialogOpen, setScriptDialogOpen] = useState(false);
+	const [scriptText, setScriptText] = useState("");
 	const containerRef = useRef<HTMLDivElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const editor = useEditor();
@@ -101,10 +130,10 @@ export function Captions() {
 		if (progress.status === "loading-model") {
 			dispatch({
 				type: "update_step",
-				step: `Loading model ${Math.round(progress.progress)}%`,
+				step: t("subtitles.loadingModel", { progress: Math.round(progress.progress) }),
 			});
 		} else if (progress.status === "transcribing") {
-			dispatch({ type: "update_step", step: "Transcribing..." });
+			dispatch({ type: "update_step", step: t("subtitles.transcribing") });
 		}
 	};
 
@@ -118,7 +147,7 @@ export function Captions() {
 	};
 
 	const handleGenerateTranscript = async () => {
-		dispatch({ type: "start", step: "Extracting audio..." });
+		dispatch({ type: "start", step: t("subtitles.extractingAudio") });
 		try {
 			const audioBlob = await extractTimelineAudio({
 				tracks: editor.scenes.getActiveScene().tracks,
@@ -126,7 +155,7 @@ export function Captions() {
 				totalDuration: editor.timeline.getTotalDuration(),
 			});
 
-			dispatch({ type: "update_step", step: "Preparing audio..." });
+			dispatch({ type: "update_step", step: t("subtitles.preparingAudio") });
 			const { samples } = await decodeAudioToFloat32({
 				audioBlob,
 				sampleRate: DEFAULT_TRANSCRIPTION_SAMPLE_RATE,
@@ -138,11 +167,11 @@ export function Captions() {
 				onProgress: handleProgress,
 			});
 
-			dispatch({ type: "update_step", step: "Generating captions..." });
+			dispatch({ type: "update_step", step: t("subtitles.generatingCaptions") });
 			const captionChunks = buildCaptionChunks({ segments: result.segments });
 
 			if (!insertCaptions({ captions: captionChunks })) {
-				dispatch({ type: "fail", error: "No captions were generated" });
+				dispatch({ type: "fail", error: t("subtitles.noCaptions") });
 				return;
 			}
 
@@ -154,7 +183,7 @@ export function Captions() {
 				error:
 					error instanceof Error
 						? error.message
-						: "An unexpected error occurred",
+						: t("subtitles.unexpectedError"),
 			});
 		}
 	};
@@ -164,7 +193,7 @@ export function Captions() {
 	};
 
 	const handleImportFile = async ({ file }: { file: File }) => {
-		dispatch({ type: "start", step: "Reading subtitle file..." });
+		dispatch({ type: "start", step: t("subtitles.readingFile") });
 		try {
 			const input = await file.text();
 			const result = parseSubtitleFile({
@@ -175,22 +204,25 @@ export function Captions() {
 			if (result.captions.length === 0) {
 				dispatch({
 					type: "fail",
-					error: "No valid subtitle cues were found in the subtitle file",
+					error: t("subtitles.noValidCues"),
 				});
 				return;
 			}
 
-			dispatch({ type: "update_step", step: "Importing subtitles..." });
+			dispatch({ type: "update_step", step: t("subtitles.importing") });
 
 			if (!insertCaptions({ captions: result.captions })) {
-				dispatch({ type: "fail", error: "No captions were generated" });
+				dispatch({ type: "fail", error: t("subtitles.noCaptions") });
 				return;
 			}
 
 			const nextWarnings = [...result.warnings];
 			if (result.skippedCueCount > 0) {
 				nextWarnings.unshift(
-					`Imported ${result.captions.length} subtitle cue(s) and skipped ${result.skippedCueCount} malformed cue(s).`,
+					t("subtitles.importedSkipped", {
+						imported: result.captions.length,
+						skipped: result.skippedCueCount,
+					}),
 				);
 			}
 
@@ -202,7 +234,7 @@ export function Captions() {
 				error:
 					error instanceof Error
 						? error.message
-						: "An unexpected error occurred",
+						: t("subtitles.unexpectedError"),
 			});
 		}
 	};
@@ -234,12 +266,29 @@ export function Captions() {
 		setSelectedLanguage(matchedLanguage.code);
 	};
 
+	const handleImportScript = () => {
+		const trimmed = scriptText.trim();
+		if (!trimmed) return;
+
+		const captions = parseScriptText({ text: trimmed });
+		if (captions.length === 0) return;
+
+		const trackId = insertCaptionChunksAsTextTrack({ editor, captions });
+		if (trackId === null) {
+			dispatch({ type: "fail", error: t("subtitles.noCaptions") });
+			return;
+		}
+
+		setScriptDialogOpen(false);
+		setScriptText("");
+	};
+
 	const error = processing.status === "idle" ? processing.error : null;
 	const warnings = processing.status === "idle" ? processing.warnings : [];
 
 	return (
 		<PanelView
-			title="Captions"
+			title={t("subtitles.title")}
 			contentClassName="px-0 flex flex-col h-full"
 			actions={
 				<TooltipProvider>
@@ -268,7 +317,18 @@ export function Captions() {
 							className="items-center justify-center gap-1.5"
 						>
 							<HugeiconsIcon icon={CloudUploadIcon} />
-							Import
+							{t("subtitles.import")}
+						</Button>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							onClick={() => setScriptDialogOpen(true)}
+							disabled={isProcessing}
+							className="items-center justify-center gap-1.5"
+						>
+							<HugeiconsIcon icon={FileEditIcon} />
+							{t("subtitles.importScript")}
 						</Button>
 					</div>
 				</TooltipProvider>
@@ -289,16 +349,16 @@ export function Captions() {
 			>
 				<SectionContent className="flex flex-col gap-4 h-full pt-1">
 					<SectionFields>
-						<SectionField label="Language">
+						<SectionField label={t("subtitles.language")}>
 							<Select
 								value={selectedLanguage}
 								onValueChange={(value) => handleLanguageChange({ value })}
 							>
 								<SelectTrigger>
-									<SelectValue placeholder="Select a language" />
+									<SelectValue placeholder={t("subtitles.selectLanguage")} />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="auto">Auto detect</SelectItem>
+									<SelectItem value="auto">{t("subtitles.autoDetect")}</SelectItem>
 									{TRANSCRIPTION_LANGUAGES.map((language) => (
 										<SelectItem key={language.code} value={language.code}>
 											{language.name}
@@ -316,7 +376,7 @@ export function Captions() {
 						disabled={isProcessing || activeDiagnostics.length > 0}
 					>
 						{isProcessing && <Spinner className="mr-1" />}
-						{isProcessing ? processing.step : "Generate transcript"}
+						{isProcessing ? processing.step : t("subtitles.generateTranscript")}
 					</Button>
 					{error && (
 						<div className="bg-destructive/10 border-destructive/20 rounded-md border p-3">
@@ -334,6 +394,31 @@ export function Captions() {
 					)}
 				</SectionContent>
 			</Section>
+			<Dialog open={scriptDialogOpen} onOpenChange={setScriptDialogOpen}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>{t("subtitles.importScript")}</DialogTitle>
+					</DialogHeader>
+					<div className="flex flex-col gap-4 pt-2">
+						<Textarea
+							value={scriptText}
+							onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) =>
+								setScriptText(event.target.value)
+							}
+							placeholder={t("subtitles.importScriptPlaceholder")}
+							rows={10}
+							className="resize-y min-h-[200px]"
+						/>
+						<Button
+							type="button"
+							onClick={handleImportScript}
+							disabled={!scriptText.trim()}
+						>
+							{t("subtitles.importScript")}
+						</Button>
+					</div>
+				</DialogContent>
+			</Dialog>
 		</PanelView>
 	);
 }

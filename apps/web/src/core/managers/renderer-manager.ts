@@ -182,6 +182,7 @@ export class RendererManager {
 				duration,
 				canvasSize,
 				background: activeProject.settings.background,
+				watermark: activeProject.settings.watermark,
 			});
 
 			const exporter = new SceneExporter({

@@ -101,6 +101,21 @@ export class ProjectManager {
 					type: "color",
 					color: DEFAULT_BACKGROUND_COLOR,
 				},
+				watermark: {
+					enabled: false,
+					type: "text",
+					text: "",
+					fontFamily: "Arial",
+					fontSize: 24,
+					fontColor: "#ffffff",
+					opacity: 0.3,
+					position: "bottom-right",
+					offsetX: 20,
+					offsetY: 20,
+					rotation: 0,
+					scale: 1,
+					tileMode: "none",
+				},
 			},
 			version: CURRENT_PROJECT_VERSION,
 		};
@@ -661,6 +676,7 @@ export class ProjectManager {
 			duration: duration || 1,
 			canvasSize,
 			background,
+			watermark: this.active.settings.watermark,
 		});
 
 		const renderer = new CanvasRenderer({

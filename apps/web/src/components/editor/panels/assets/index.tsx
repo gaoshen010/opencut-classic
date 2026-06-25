@@ -10,6 +10,7 @@ import { SoundsView } from "@/sounds/components/assets-view";
 import { StickersView } from "@/stickers/components/assets-view";
 import { TextView } from "@/text/components/assets-view";
 import { EffectsView } from "@/effects/components/assets-view";
+import { t } from "@/i18n";
 
 export function AssetsPanel() {
 	const { activeTab } = useAssetsPanelStore();
@@ -22,13 +23,13 @@ export function AssetsPanel() {
 		effects: <EffectsView />,
 		transitions: (
 			<div className="text-muted-foreground p-4">
-				Transitions view coming soon...
+				{t("placeholder.transitions")}
 			</div>
 		),
 		captions: <Captions />,
 		adjustment: (
 			<div className="text-muted-foreground p-4">
-				Adjustment view coming soon...
+				{t("placeholder.adjustment")}
 			</div>
 		),
 		settings: <SettingsView />,
