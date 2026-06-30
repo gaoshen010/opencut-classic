@@ -6,6 +6,10 @@ import { generateUUID } from "@/utils/id";
 import { videoCache } from "@/services/video-cache/service";
 import { waveformCache } from "@/services/waveform-cache/service";
 import { BatchCommand, RemoveMediaAssetCommand } from "@/commands";
+import type {
+	RemoteMaterial,
+	ClientMediaMetadata,
+} from "@/services/storage/remote-types";
 
 export class MediaManager {
 	private assets: MediaAsset[] = [];
@@ -162,6 +166,141 @@ export class MediaManager {
 	subscribe(listener: () => void): () => void {
 		this.listeners.add(listener);
 		return () => this.listeners.delete(listener);
+	}
+
+	// ──────────────────────────────────────────────────────
+	// Remote Material Methods (Phase 2)
+	// ──────────────────────────────────────────────────────
+
+	/**
+	 * Upload a file to the server and add it to the project as a media asset.
+	 * The file is uploaded via chunked upload, then downloaded back to create
+	 * a local blob URL for the rendering pipeline.
+	 */
+	async uploadToServer({
+		projectId,
+		file,
+		metadata,
+		onProgress,
+	}: {
+		projectId: string;
+		file: File;
+		metadata?: ClientMediaMetadata;
+		onProgress?: (progress: number) => void;
+	}): Promise<MediaAsset | null> {
+		try {
+			// Upload to server
+			const remoteMaterial = await storageService.uploadMaterialToServer({
+				file,
+				metadata,
+				onProgress,
+			});
+
+			// Load it back as a MediaAsset (downloads + caches locally)
+			const asset = await storageService.loadRemoteMaterialAsAsset({
+				material: remoteMaterial,
+			});
+
+			if (!asset) {
+				toast.error("上传成功但无法加载素材");
+				return null;
+			}
+
+			// Add to local project state (already uploaded to server, so skip local save)
+			this.assets = [...this.assets, asset];
+			this.notify();
+
+			this.editor.project.ratchetFpsForImportedMedia({
+				importedAssets: [asset],
+			});
+
+			return asset;
+		} catch (error) {
+			console.error("Failed to upload material to server:", error);
+			toast.error("上传素材失败", {
+				description:
+					error instanceof Error ? error.message : "请重试",
+			});
+			return null;
+		}
+	}
+
+	/**
+	 * Load remote materials from the server (list only, no download).
+	 * Returns the paginated list of RemoteMaterial records.
+	 */
+	async loadRemoteMaterials({
+		type = "all",
+		page = 1,
+		pageSize = 50,
+	}: {
+		type?: "image" | "video" | "audio" | "all";
+		page?: number;
+		pageSize?: number;
+	} = {}) {
+		return storageService.listRemoteMaterials({ type, page, pageSize });
+	}
+
+	/**
+	 * Add an existing remote material to the current project.
+	 * Downloads the file from the server and creates a local MediaAsset.
+	 */
+	async addRemoteMaterialToProject({
+		projectId,
+		material,
+	}: {
+		projectId: string;
+		material: RemoteMaterial;
+	}): Promise<MediaAsset | null> {
+		// Check if already loaded
+		if (this.assets.some((a) => a.id === material.id)) {
+			return this.assets.find((a) => a.id === material.id) ?? null;
+		}
+
+		const asset = await storageService.loadRemoteMaterialAsAsset({
+			material,
+		});
+
+		if (!asset) {
+			toast.error("无法加载远程素材");
+			return null;
+		}
+
+		this.assets = [...this.assets, asset];
+		this.notify();
+
+		this.editor.project.ratchetFpsForImportedMedia({
+			importedAssets: [asset],
+		});
+
+		return asset;
+	}
+
+	/**
+	 * Remove a remote material from the server and local state.
+	 */
+	async removeRemoteMaterial({
+		projectId,
+		id,
+	}: {
+		projectId: string;
+		id: string;
+	}): Promise<void> {
+		// Remove from local state
+		const asset = this.assets.find((a) => a.id === id);
+		if (asset) {
+			if (asset.url) URL.revokeObjectURL(asset.url);
+			if (asset.thumbnailUrl) URL.revokeObjectURL(asset.thumbnailUrl);
+		}
+		this.assets = this.assets.filter((a) => a.id !== id);
+		this.notify();
+
+		// Delete from server
+		try {
+			await storageService.deleteRemoteMaterial({ id });
+		} catch (error) {
+			console.error("Failed to delete remote material:", error);
+		}
 	}
 
 	private notify(): void {

@@ -23,6 +23,18 @@ const webEnvSchema = z.object({
 	MARBLE_WORKSPACE_KEY: z.string(),
 	FREESOUND_CLIENT_ID: z.string(),
 	FREESOUND_API_KEY: z.string(),
+
+	// MinIO / S3 Object Storage
+	MINIO_ENDPOINT: z.string().default("localhost"),
+	MINIO_PORT: z.coerce.number().default(9000),
+	MINIO_ACCESS_KEY: z.string().default("minioadmin"),
+	MINIO_SECRET_KEY: z.string().default("minioadmin"),
+	MINIO_BUCKET: z.string().default("opencut-materials"),
+	MINIO_USE_SSL: z
+		.string()
+		.default("false")
+		.transform((v) => v === "true"),
+	MINIO_PUBLIC_URL: z.url().optional(),
 });
 
 export type WebEnv = z.infer<typeof webEnvSchema>;

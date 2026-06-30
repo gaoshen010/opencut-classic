@@ -1,4 +1,13 @@
-import { pgTable, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import {
+	pgTable,
+	text,
+	timestamp,
+	boolean,
+	uuid,
+	integer,
+	bigint,
+	real,
+} from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
 	id: text("id").primaryKey(),
@@ -67,4 +76,51 @@ export const verifications = pgTable("verifications", {
 	updatedAt: timestamp("updated_at").$defaultFn(
 		() => /* @__PURE__ */ new Date(),
 	),
+}).enableRLS();
+
+export const materials = pgTable("materials", {
+	id: uuid("id").primaryKey().defaultRandom(),
+	userId: text("user_id")
+		.notNull()
+		.references(() => users.id, { onDelete: "cascade" }),
+	filename: text("filename").notNull(),
+	mimeType: text("mime_type").notNull(),
+	size: bigint("size", { mode: "number" }).notNull(),
+	width: integer("width"),
+	height: integer("height"),
+	duration: real("duration"),
+	fps: integer("fps"),
+	hasAudio: boolean("has_audio"),
+	thumbnailKey: text("thumbnail_key"),
+	previewKey: text("preview_key"),
+	originalKey: text("original_key").notNull(),
+	status: text("status", { enum: ["processing", "ready", "failed"] })
+		.notNull()
+		.default("processing"),
+	createdAt: timestamp("created_at")
+		.$defaultFn(() => new Date())
+		.notNull(),
+	updatedAt: timestamp("updated_at")
+		.$defaultFn(() => new Date())
+		.notNull(),
+}).enableRLS();
+
+export const uploadSessions = pgTable("upload_sessions", {
+	id: uuid("id").primaryKey().defaultRandom(),
+	userId: text("user_id")
+		.notNull()
+		.references(() => users.id, { onDelete: "cascade" }),
+	filename: text("filename").notNull(),
+	mimeType: text("mime_type").notNull(),
+	size: bigint("size", { mode: "number" }).notNull(),
+	totalChunks: integer("total_chunks").notNull(),
+	receivedChunks: integer("received_chunks").notNull().default(0),
+	objectKey: text("object_key").notNull(),
+	status: text("status", { enum: ["uploading", "merging", "completed", "failed"] })
+		.notNull()
+		.default("uploading"),
+	expiresAt: timestamp("expires_at").notNull(),
+	createdAt: timestamp("created_at")
+		.$defaultFn(() => new Date())
+		.notNull(),
 }).enableRLS();

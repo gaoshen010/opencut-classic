@@ -22,6 +22,18 @@ Thanks to [Vercel](https://vercel.com?utm_source=github-opencut&utm_campaign=oss
 - **Free features**: Most basic CapCut features are now paywalled 
 - **Simple**: People want editors that are easy to use - CapCut proved that
 
+## Customized Features (Phase 1 & 2)
+
+This fork adds the following capabilities on top of the original OpenCut:
+
+- **Chinese UI (i18n)**: Full Chinese localization of the editor, covering 450+ translation keys across all panels, dialogs, and menus.
+- **Semi-transparent Watermark**: Project-level watermark support (text or image) with 9-position grid layout, tile mode, and opacity control. Injected as the last render layer in the GPU compositor.
+- **Subtitle Editing**: Script-based subtitle import (Chinese punctuation splitting), batch style sync, and subtitle track management.
+- **Title Templates**: 8 built-in Chinese title templates with animation presets for quick text styling.
+- **Server-side Material Library (Phase 2)**: Cloud-backed material storage using MinIO/S3 + PostgreSQL. Supports chunked upload (5MB/chunk), per-user material isolation, presigned download URLs, local OPFS caching, and a cloud material browser panel in the editor.
+
+See [`docs/改造技术方案与实施规划.md`](docs/改造技术方案与实施规划.md) for the full technical plan.
+
 ## Project Structure
 
 - `apps/web/`: Next.js web application
@@ -52,11 +64,13 @@ Thanks to [Vercel](https://vercel.com?utm_source=github-opencut&utm_campaign=oss
    Copy-Item apps/web/.env.example apps/web/.env.local
    ```
 
-3. Start the database and Redis:
+3. Start the database, Redis, and MinIO (object storage):
 
    ```bash
-   docker compose up -d db redis serverless-redis-http
+   docker compose up -d db redis serverless-redis-http minio minio-init
    ```
+
+   > **Note:** MinIO is required for the server-side material library (Phase 2). If you only need frontend features, you can skip `minio` and `minio-init`.
 
 4. Install dependencies and start the dev server:
 
@@ -68,6 +82,22 @@ Thanks to [Vercel](https://vercel.com?utm_source=github-opencut&utm_campaign=oss
 The application will be available at [http://localhost:3000](http://localhost:3000).
 
 The `.env.example` has sensible defaults that match the Docker Compose config — it should work out of the box.
+
+### MinIO / Object Storage (Phase 2)
+
+The server-side material library uses MinIO (S3-compatible) for file storage. All MinIO variables have defaults that work with the Docker Compose config:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MINIO_ENDPOINT` | `localhost` | MinIO server hostname |
+| `MINIO_PORT` | `9000` | MinIO S3 API port |
+| `MINIO_ACCESS_KEY` | `minioadmin` | MinIO access key |
+| `MINIO_SECRET_KEY` | `minioadmin` | MinIO secret key |
+| `MINIO_BUCKET` | `opencut-materials` | Bucket name for material files |
+| `MINIO_USE_SSL` | `false` | Use HTTPS for MinIO connections |
+| `MINIO_PUBLIC_URL` | _(none)_ | Public URL for presigned URLs (set if MinIO is behind a reverse proxy) |
+
+The MinIO web console is available at [http://localhost:9001](http://localhost:9001) (credentials: `minioadmin` / `minioadmin`).
 
 ### Desktop setup
 
@@ -127,13 +157,13 @@ bun add opencut-wasm
 
 ### Self-Hosting with Docker
 
-To run everything (including a production build of the app) in Docker:
+To run everything (including a production build of the app, database, Redis, and MinIO) in Docker:
 
 ```bash
 docker compose up -d
 ```
 
-The app will be available at [http://localhost:3100](http://localhost:3100).
+The app will be available at [http://localhost:3100](http://localhost:3100). MinIO console at [http://localhost:9001](http://localhost:9001).
 
 ## Contributing
 

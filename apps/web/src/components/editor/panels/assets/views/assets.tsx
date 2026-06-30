@@ -59,6 +59,9 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { useT } from "@/i18n";
+import { RemoteMaterialLibrary } from "./remote-material-library";
+import { materialApi } from "@/services/storage/remote-api";
+import type { ClientMediaMetadata } from "@/services/storage/remote-types";
 
 export function MediaView() {
 	const t = useT();
@@ -78,6 +81,7 @@ export function MediaView() {
 
 	const [isProcessing, setIsProcessing] = useState(false);
 	const [progress, setProgress] = useState(0);
+	const [showCloudLibrary, setShowCloudLibrary] = useState(false);
 
 	const processFiles = async ({ files }: { files: File[] }) => {
 		if (!files || files.length === 0) return;
@@ -97,12 +101,35 @@ export function MediaView() {
 						onProgress: (progress: { progress: number }) =>
 							setProgress(progress.progress),
 					});
+
+					// Upload to server if available, then add to project
+					const projectId = activeProject.metadata.id;
 					for (const asset of processedAssets) {
-						await editor.media.addMediaAsset({
-							projectId: activeProject.metadata.id,
-							asset,
-						});
+						// Upload to server in background
+						try {
+							const metadata: ClientMediaMetadata = {
+								width: asset.width,
+								height: asset.height,
+								duration: asset.duration,
+								fps: asset.fps,
+								hasAudio: asset.hasAudio,
+								thumbnailDataUrl: asset.thumbnailUrl,
+							};
+							await editor.media.uploadToServer({
+								projectId,
+								file: asset.file,
+								metadata,
+							});
+						} catch (err) {
+							console.warn("Server upload failed, using local only:", err);
+							// Fall back to local-only storage
+							await editor.media.addMediaAsset({
+								projectId,
+								asset,
+							});
+						}
 					}
+
 					return {
 						uploadedCount: processedAssets.length,
 						assetNames: processedAssets.map((asset) => asset.name),
@@ -194,7 +221,7 @@ export function MediaView() {
 			<input {...fileInputProps} />
 
 			<PanelView
-				title={t("assets.media.title")}
+				title={showCloudLibrary ? "云端素材库" : t("assets.media.title")}
 				actions={
 					<MediaActions
 						mediaViewMode={mediaViewMode}
@@ -204,13 +231,19 @@ export function MediaView() {
 						sortOrder={mediaSortOrder}
 						onSort={handleSort}
 						onImport={openFilePicker}
+						showCloudLibrary={showCloudLibrary}
+						onToggleCloudLibrary={() =>
+							setShowCloudLibrary((v) => !v)
+						}
 					/>
 				}
 				className={cn(isDragOver && "bg-accent/30")}
 				contentClassName="h-full"
 				{...dragProps}
 			>
-				{isDragOver || filteredMediaItems.length === 0 ? (
+				{showCloudLibrary ? (
+					<RemoteMaterialLibrary />
+				) : isDragOver || filteredMediaItems.length === 0 ? (
 					<MediaDragOverlay
 						isVisible={true}
 						isProcessing={isProcessing}
@@ -519,6 +552,8 @@ function MediaActions({
 	sortOrder,
 	onSort,
 	onImport,
+	showCloudLibrary,
+	onToggleCloudLibrary,
 }: {
 	mediaViewMode: MediaViewMode;
 	setMediaViewMode: (mode: MediaViewMode) => void;
@@ -527,6 +562,8 @@ function MediaActions({
 	sortOrder: MediaSortOrder;
 	onSort: ({ key }: { key: MediaSortKey }) => void;
 	onImport: () => void;
+	showCloudLibrary: boolean;
+	onToggleCloudLibrary: () => void;
 }) {
 	const t = useT();
 
@@ -614,6 +651,35 @@ function MediaActions({
 										: t("assets.media.sort.descending"),
 							})}
 						</p>
+					</TooltipContent>
+				</Tooltip>
+			</TooltipProvider>
+			<TooltipProvider>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							size="icon"
+							variant={showCloudLibrary ? "default" : "ghost"}
+							onClick={onToggleCloudLibrary}
+							disabled={isProcessing}
+							className="items-center justify-center"
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								strokeWidth="2"
+								strokeLinecap="round"
+								strokeLinejoin="round"
+								className="size-4"
+							>
+								<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+							</svg>
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent>
+						<p>{showCloudLibrary ? "本地素材" : "云端素材库"}</p>
 					</TooltipContent>
 				</Tooltip>
 			</TooltipProvider>

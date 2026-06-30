@@ -3,6 +3,9 @@ import { getProjectDurationFromScenes } from "@/timeline/scenes";
 import type { MediaAsset } from "@/media/types";
 import { IndexedDBAdapter } from "./indexeddb-adapter";
 import { OPFSAdapter } from "./opfs-adapter";
+import { RemoteMaterialAdapter } from "./remote-adapter";
+import { materialApi } from "./remote-api";
+import type { RemoteMaterial, ClientMediaMetadata } from "./remote-types";
 import {
 	type StorageCapacityCheckResult,
 	StorageQuotaExceededError,
@@ -54,6 +57,8 @@ function normalizeBookmarks({ raw }: { raw: unknown }): Bookmark[] {
 class StorageService {
 	private projectsAdapter: IndexedDBAdapter<SerializedProject>;
 	private savedSoundsAdapter: IndexedDBAdapter<SavedSoundsData>;
+	private remoteMaterialAdapter: RemoteMaterialAdapter;
+	private remoteCacheAdapter: IndexedDBAdapter<MediaAssetData> | null = null;
 	private config: StorageConfig;
 	private migrationsPromise: Promise<void> | null = null;
 
@@ -76,6 +81,23 @@ class StorageService {
 			storeName: "saved-sounds",
 			version: this.config.version,
 		});
+
+		this.remoteMaterialAdapter = new RemoteMaterialAdapter();
+	}
+
+	/**
+	 * Initialize the remote material cache adapter.
+	 * Should be called after the service is constructed (lazy init).
+	 */
+	private getRemoteCacheAdapter(): IndexedDBAdapter<MediaAssetData> {
+		if (!this.remoteCacheAdapter) {
+			this.remoteCacheAdapter = new IndexedDBAdapter<MediaAssetData>({
+				dbName: "video-editor-remote-cache",
+				storeName: "remote-materials",
+				version: 1,
+			});
+		}
+		return this.remoteCacheAdapter;
 	}
 
 	private async ensureMigrations(): Promise<void> {
@@ -568,6 +590,181 @@ class StorageService {
 
 	isFullySupported(): boolean {
 		return this.isIndexedDBSupported() && this.isOPFSSupported();
+	}
+
+	// ──────────────────────────────────────────────────────
+	// Remote Material Methods (Phase 2: Server-side storage)
+	// ──────────────────────────────────────────────────────
+
+	/**
+	 * Upload a file to the server via chunked upload.
+	 * Returns the remote material record.
+	 */
+	async uploadMaterialToServer({
+		file,
+		metadata,
+		onProgress,
+	}: {
+		file: File;
+		metadata?: ClientMediaMetadata;
+		onProgress?: (progress: number) => void;
+	}): Promise<RemoteMaterial> {
+		return materialApi.upload(file, metadata, onProgress);
+	}
+
+	/**
+	 * List remote materials from the server.
+	 */
+	async listRemoteMaterials({
+		type = "all",
+		page = 1,
+		pageSize = 50,
+	}: {
+		type?: "image" | "video" | "audio" | "all";
+		page?: number;
+		pageSize?: number;
+	} = {}) {
+		return materialApi.list({ type, page, pageSize });
+	}
+
+	/**
+	 * Load a remote material as a MediaAsset by downloading it from the server.
+	 * Uses local cache to avoid redundant downloads.
+	 */
+	async loadRemoteMaterialAsAsset({
+		material,
+	}: {
+		material: RemoteMaterial;
+	}): Promise<MediaAsset | null> {
+		try {
+			// Try to get from local OPFS cache first
+			const cacheAdapter = this.getRemoteCacheAdapter();
+			const cachedMeta = await cacheAdapter.get(material.id);
+
+			if (cachedMeta) {
+				// We have cached metadata; try loading from OPFS
+				const opfsAdapter = new OPFSAdapter("remote-material-cache");
+				const cachedFile = await opfsAdapter.get(material.id);
+
+				if (cachedFile) {
+					const url = URL.createObjectURL(cachedFile);
+					return {
+						id: material.id,
+						name: material.filename,
+						type: cachedMeta.type,
+						file: cachedFile,
+						url,
+						width: material.width ?? undefined,
+						height: material.height ?? undefined,
+						duration: material.duration ?? undefined,
+						fps: material.fps ?? undefined,
+						hasAudio: material.hasAudio ?? undefined,
+						thumbnailUrl: cachedMeta.thumbnailUrl,
+					};
+				}
+			}
+
+			// Not cached: download from server
+			const file = await materialApi.downloadFile(
+				material.id,
+				material.filename,
+				"download",
+			);
+
+			// Get thumbnail URL if available
+			let thumbnailUrl: string | undefined;
+			if (material.thumbnailKey) {
+				try {
+					const thumbResult = await materialApi.getUrl(
+						material.id,
+						"thumbnail",
+					);
+					thumbnailUrl = thumbResult.url;
+				} catch {
+					// Thumbnail not critical; continue without it
+				}
+			}
+
+			// Cache the file in OPFS for future use
+			try {
+				const opfsAdapter = new OPFSAdapter("remote-material-cache");
+				await opfsAdapter.set({ key: material.id, value: file });
+
+				// Cache metadata
+				const mediaType = material.mimeType.startsWith("image/")
+					? "image"
+					: material.mimeType.startsWith("video/")
+						? "video"
+						: "audio";
+				await cacheAdapter.set({
+					key: material.id,
+					value: {
+						id: material.id,
+						name: material.filename,
+						type: mediaType as "image" | "video" | "audio",
+						size: material.size,
+						lastModified: new Date(material.createdAt).getTime(),
+						width: material.width ?? undefined,
+						height: material.height ?? undefined,
+						duration: material.duration ?? undefined,
+						fps: material.fps ?? undefined,
+						hasAudio: material.hasAudio ?? undefined,
+						thumbnailUrl,
+					},
+				});
+			} catch {
+				// Cache failures are non-fatal
+			}
+
+			const url = URL.createObjectURL(file);
+			return {
+				id: material.id,
+				name: material.filename,
+				type: material.mimeType.startsWith("image/")
+					? "image"
+					: material.mimeType.startsWith("video/")
+						? "video"
+						: "audio",
+				file,
+				url,
+				width: material.width ?? undefined,
+				height: material.height ?? undefined,
+				duration: material.duration ?? undefined,
+				fps: material.fps ?? undefined,
+				hasAudio: material.hasAudio ?? undefined,
+				thumbnailUrl,
+			};
+		} catch (error) {
+			console.error(
+				`[storage] Failed to load remote material ${material.id}:`,
+				error,
+			);
+			return null;
+		}
+	}
+
+	/**
+	 * Delete a remote material from the server and local cache.
+	 */
+	async deleteRemoteMaterial({ id }: { id: string }): Promise<void> {
+		await materialApi.delete(id);
+
+		// Clean up local cache
+		try {
+			const cacheAdapter = this.getRemoteCacheAdapter();
+			await cacheAdapter.remove(id);
+			const opfsAdapter = new OPFSAdapter("remote-material-cache");
+			await opfsAdapter.remove(id);
+		} catch {
+			// Cache cleanup failures are non-fatal
+		}
+	}
+
+	/**
+	 * Get the remote material adapter instance.
+	 */
+	getRemoteMaterialAdapter(): RemoteMaterialAdapter {
+		return this.remoteMaterialAdapter;
 	}
 }
 
